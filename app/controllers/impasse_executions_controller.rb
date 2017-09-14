@@ -9,7 +9,7 @@ class ImpasseExecutionsController < ImpasseAbstractController
   include CustomFieldsHelper
 
   menu_item :impasse
-  before_filter :find_project_by_project_id, :authorize
+  before_action :find_project_by_project_id, :authorize
 
   include ActionView::Helpers::AssetTagHelper
 
@@ -28,13 +28,11 @@ class ImpasseExecutionsController < ImpasseAbstractController
     status = 'success'
     errors = []
     for test_case_id in test_case_ids
-      test_plan_case = Impasse::TestPlanCase.find(:first, :conditions=>[
-                                                                        "test_plan_id=? AND test_case_id=?",
-                                                                        params[:test_plan_case][:test_plan_id],
-                                                                        test_case_id])
-      next if test_plan_case.nil?
-      execution = Impasse::Execution.find_or_initialize_by_test_plan_case_id(test_plan_case.id)
-      execution.attributes = params[:execution]
+      test_plan_case = Impasse::TestPlanCase.where(
+        test_plan_id: params[:test_plan_case][:test_plan_id], test_case_id: test_case_id).first
+      next unless test_plan_case
+      execution = Impasse::Execution.where(test_plan_case_id: test_plan_case.id).first_or_initialize
+      execution.attributes = params.require(:execution).permit! if params[:execution]
       if params[:record]
         execution.execution_ts = Time.now.to_datetime
         execution.executor_id = User.current.id
@@ -66,8 +64,8 @@ class ImpasseExecutionsController < ImpasseAbstractController
 
     status = true
     for test_case_id in test_case_ids
-      test_plan_case = Impasse::TestPlanCase.find(:first, :conditions=>[
-                         "test_plan_id=? AND test_case_id=?", params[:test_plan_case][:test_plan_id], test_case_id])
+      test_plan_case = Impasse::TestPlanCase.where(
+                         "test_plan_id=? AND test_case_id=?", params[:test_plan_case][:test_plan_id], test_case_id).first
       next if test_plan_case.nil?
       execution = Impasse::Execution.find_by_test_plan_case_id(test_plan_case.id)
       next if execution.nil?
@@ -103,10 +101,8 @@ END_OF_SQL
     else
       @execution = executions.first
     end
-    @execution.attributes = params[:execution]
-    @execution_histories = Impasse::ExecutionHistory.find(:all, :joins => [ :executor ],
-                                                          :conditions => ["test_plan_case_id=?", @execution.test_plan_case_id],
-                                                          :order => "execution_ts DESC")
+    @execution.attributes = params.require(:execution).permit! if params[:execution]
+    @execution_histories = Impasse::ExecutionHistory.joins(:executor).where("test_plan_case_id=?", @execution.test_plan_case_id).order("execution_ts DESC")
     if request.post? and @execution.save
       render :json => {'status'=>true}
     else
@@ -129,8 +125,6 @@ END_OF_SQL
       end
       assign_text = []
       if node.firstname or node.lastname
-        firstname = node.firstname
-        lastname  = node.lastname
         assign_text << User.new(:firstname => node.firstname, :lastname => node.lastname).name
       end
       if node.expected_date

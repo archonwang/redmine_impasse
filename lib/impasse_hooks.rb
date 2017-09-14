@@ -17,7 +17,8 @@ module ImpassePlugin
 
         project = context[:project]
         snippet = ''
-  
+        return snippet unless project
+
         setting = Impasse::Setting.find_by_project_id(project.id) || Impasse::Setting.create(:project_id => project.id)
 
         if setting.bug_tracker_id == issue.tracker_id
@@ -33,6 +34,20 @@ module ImpassePlugin
         return ''
       end
     end
+    def view_projects_roadmap_version_bottom(context = {})
+      begin
+        version = context[:version]
+        link_to('Traceability Report',
+                {:controller => :impasse_requirement_issues, :project_id => version.project, :action => :traceability_report,
+                                    :status_id => '*', :fixed_version_id => version,
+                                    :set_filter => 1})
+
+      rescue => e
+        exception(context, e)
+        return ''
+      end
+    end
+
 
     def view_issues_show_description_bottom(context = {})
       begin
